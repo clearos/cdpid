@@ -1,0 +1,55 @@
+# ClearSync Process Watch Plugin RPM spec
+Name: @PACKAGE_TARNAME@
+Version: @PACKAGE_VERSION@
+Release: 1%{dist}
+Vendor: ClearFoundation
+License: GPL
+Group: System/Daemons
+Packager: ClearFoundation
+Source: %{name}-%{version}.tar.gz
+BuildRoot: /var/tmp/%{name}-%{version}
+#Requires: /usr/bin/sudo
+Requires: /usr/bin/systemctl
+BuildRequires: autoconf >= 2.63
+BuildRequires: automake
+BuildRequires: libtool
+BuildRequires: json-c-devel
+Summary: ClearOS Deep Packet Inspection Daemon
+Requires(pre): /sbin/ldconfig
+
+%description
+Deep Packet Inspection Daemon (DPI) based off of nDPI (http://www.ntop.org/products/deep-packet-inspection/ndpi/).
+Report bugs to: @PACKAGE_BUGREPORT@
+
+# Build
+%prep
+%setup -q
+./autogen.sh
+%{configure}
+
+%build
+make %{?_smp_mflags}
+
+# Install
+%install
+make install DESTDIR=$RPM_BUILD_ROOT
+
+# Clean-up
+%clean
+[ "$RPM_BUILD_ROOT" != "/" ] && rm -rf $RPM_BUILD_ROOT
+
+# Post install
+%post
+/sbin/ldconfig
+/usr/bin/systemctl restart cdpid -q
+
+# Post uninstall
+%postun
+/sbin/ldconfig
+/usr/bin/systemctl restart cdpid -q
+
+# Files
+%files
+%defattr(-,root,root)
+#%{_libdir}/libcsplugin-procwatch.so*
+

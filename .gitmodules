@@ -1,0 +1,3 @@
+[submodule "ndpi"]
+	path = ndpi
+	url = git@github.com:dsokoloski/nDPI.git

@@ -1,0 +1,11 @@
+AUTOMAKE_OPTIONS = foreign
+ACLOCAL_AMFLAGS = -I m4
+
+AM_CXXFLAGS = ${CXXFLAGS} -I../include -I../ndpi/src/include
+
+#EXTRA_DIST = 
+
+sbin_PROGRAMS = cdpid
+cdpid_SOURCES = cdpid.cpp
+cdpid_LDADD = ../ndpi/src/lib/libndpi.la
+
