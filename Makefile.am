@@ -3,5 +3,5 @@ ACLOCAL_AMFLAGS = -I m4
 
 SUBDIRS = ndpi src
 
-#EXTRA_DIST = 
+EXTRA_DIST = autogen.sh ndpi include
 

@@ -17,6 +17,10 @@ AM_PROG_LIBTOOL
 # Checks for libraries.
 #AC_CHECK_LIB([procps], [openproc], [], [
 #        AC_MSG_ERROR([libprocps not found but is required.])])
+AC_CHECK_LIB([pthread], [pthread_create], [], [
+	AC_MSG_ERROR([libpthread not found.])])
+AC_CHECK_LIB([pcap], [pcap_open_live], [], [
+	AC_MSG_ERROR([libpcap not found.])])
 
 # Checks for header files.
 #AC_CHECK_HEADERS([proc/readproc.h], [], [AC_MSG_ERROR([procps header files not found.])])

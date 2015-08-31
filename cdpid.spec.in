@@ -13,6 +13,7 @@ Requires: /usr/bin/systemctl
 BuildRequires: autoconf >= 2.63
 BuildRequires: automake
 BuildRequires: libtool
+BuildRequires: libpcap-devel
 BuildRequires: json-c-devel
 Summary: ClearOS Deep Packet Inspection Daemon
 Requires(pre): /sbin/ldconfig
@@ -33,6 +34,9 @@ make %{?_smp_mflags}
 # Install
 %install
 make install DESTDIR=$RPM_BUILD_ROOT
+rm -rf $RPM_BUILD_ROOT/%{_libdir}
+rm -rf $RPM_BUILD_ROOT/%{_includedir}
+rm -rf $RPM_BUILD_ROOT/%{_bindir}
 
 # Clean-up
 %clean
@@ -51,5 +55,5 @@ make install DESTDIR=$RPM_BUILD_ROOT
 # Files
 %files
 %defattr(-,root,root)
-#%{_libdir}/libcsplugin-procwatch.so*
+%{_sbindir}/cdpid
 
