@@ -11,7 +11,7 @@ Makefile
 Makefile.in
 missing
 src/cdpid
-src/cdpid.o
 src/.deps/
 src/Makefile
+src/*.o
 stamp-h1

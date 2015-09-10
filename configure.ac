@@ -21,6 +21,8 @@ AC_CHECK_LIB([pthread], [pthread_create], [], [
 	AC_MSG_ERROR([libpthread not found.])])
 AC_CHECK_LIB([pcap], [pcap_open_live], [], [
 	AC_MSG_ERROR([libpcap not found.])])
+AC_CHECK_LIB([crypto], [SHA1_Init], [], [
+	AC_MSG_ERROR([libcrypto not found.])])
 
 # Checks for header files.
 #AC_CHECK_HEADERS([proc/readproc.h], [], [AC_MSG_ERROR([procps header files not found.])])
