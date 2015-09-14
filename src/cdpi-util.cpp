@@ -21,6 +21,8 @@
 #include <cstdlib>
 #include <cstdarg>
 
+#include <syslog.h>
+
 #include "ndpi_main.h"
 
 using namespace std;
@@ -35,6 +37,26 @@ void *cdpi_mem_alloc(unsigned long size)
 void cdpi_mem_free(void *ptr)
 {
     free(ptr);
+}
+
+extern cdpi_output_flags cdpi_output_mode;
+extern pthread_mutex_t *cdpi_output_mutex;
+
+void cdpi_printf(const char *format, ...)
+{
+    pthread_mutex_lock(cdpi_output_mutex);
+
+    va_list ap;
+    va_start(ap, format);
+
+    if (cdpi_output_mode & CDPI_PRINTF_STDOUT)
+        vfprintf(stdout, format, ap);
+    if (cdpi_output_mode & CDPI_PRINTF_SYSLOG)
+        vsyslog(LOG_DAEMON | LOG_INFO, format, ap);
+
+    va_end(ap);
+
+    pthread_mutex_unlock(cdpi_output_mutex);
 }
 
 void cdpi_debug_printf(

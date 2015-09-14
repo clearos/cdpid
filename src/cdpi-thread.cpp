@@ -108,12 +108,53 @@ void cdpiFlow::hash(string &digest)
     digest.assign((const char *)_digest, SHA_DIGEST_LENGTH);
 }
 
+
+void cdpiFlow::print(const char *tag, struct ndpi_detection_module_struct *ndpi)
+{
+    char *p = NULL, buffer[64];
+
+    if (detected_protocol.master_protocol) {
+        ndpi_protocol2name(ndpi,
+            detected_protocol, buffer, sizeof(buffer));
+        p = buffer;
+    }
+    else
+        p = ndpi_get_proto_name(ndpi, detected_protocol.protocol);
+#if 1
+    printf(
+        "%s: %s%s: %s:%hu <-> %s:%hu\n", tag, p,
+        (detection_guessed &&
+            detected_protocol.protocol != NDPI_PROTOCOL_UNKNOWN) ? " [GUESSED]" : "",
+        lower_ip,
+        ntohs(lower_port), upper_ip,
+        ntohs(upper_port));
+#else
+    printf(
+        "%s: %s%s: %s:[%02x:%02x:%02x:%02x:%02x:%02x]:%hu <-> %s:[%02x:%02x:%02x:%02x:%02x:%02x]:%hu\n", tag, p,
+        (detection_guessed &&
+            detected_protocol.protocol != NDPI_PROTOCOL_UNKNOWN) ? " [GUESSED]" : "",
+        lower_ip,
+        lower_mac[0], lower_mac[1], lower_mac[2],
+        lower_mac[3], lower_mac[4], lower_mac[5],
+        ntohs(lower_port), upper_ip,
+        upper_mac[0], upper_mac[1], upper_mac[2],
+        upper_mac[3], upper_mac[4], upper_mac[5],
+        ntohs(upper_port));
+#endif
+}
+
 cdpiThread::cdpiThread(const string &tag, long cpu)
-    : tag(tag), id(0), terminate(false)
+    : tag(tag), id(0), cpu(cpu), terminate(false), lock(NULL)
 {
     int rc;
 
     if ((rc = pthread_attr_init(&attr)) != 0)
+        throw cdpiThreadException(strerror(rc));
+
+    lock = new pthread_mutex_t;
+    if (lock == NULL) throw cdpiThreadException(strerror(ENOMEM));
+
+    if ((rc = pthread_mutex_init(lock, NULL)) != 0)
         throw cdpiThreadException(strerror(rc));
 
     if (cpu == -1) return;
@@ -137,13 +178,15 @@ cdpiThread::cdpiThread(const string &tag, long cpu)
     );
 
     CPU_FREE(cpuset);
-
-    cout << tag << ": created thread on CPU: " << cpu << endl;
 }
 
 cdpiThread::~cdpiThread(void)
 {
     pthread_attr_destroy(&attr);
+    if (lock != NULL) {
+        pthread_mutex_destroy(lock);
+        delete lock;
+    }
 }
 
 void cdpiThread::SetProcName(void)
@@ -188,7 +231,8 @@ cdpiDetectionThread::cdpiDetectionThread(const string &dev,
     : cdpiThread(dev, cpu), flows(flow_map), stats(stats),
     pcap(NULL), ndpi(NULL),
     pcap_snaplen(CDPI_PCAP_SNAPLEN), pcap_datalink_type(0),
-    pkt_header(NULL), pkt_data(NULL), ts_pkt_last(0)
+    pkt_header(NULL), pkt_data(NULL), ts_pkt_last(0),
+    ts_last_idle_scan(0)
 {
     memset(stats, 0, sizeof(struct cdpiDetectionStats));
 
@@ -229,30 +273,29 @@ cdpiDetectionThread::~cdpiDetectionThread()
 
 void *cdpiDetectionThread::Entry(void)
 {
-    cout << tag << ": capture started" << endl;
+    cdpi_printf("%s: capture started on CPU: %lu\n",
+        tag.c_str(), cpu >= 0 ? cpu : 0);
 
     do {
         switch (pcap_next_ex(pcap, &pkt_header, &pkt_data)) {
         case 0:
             break;
         case 1:
-            ProcessPacket();
+            try {
+                pthread_mutex_lock(lock);
+                ProcessPacket();
+                pthread_mutex_unlock(lock);
+            }
+            catch (exception &e) {
+                pthread_mutex_unlock(lock);
+                throw;
+            }
             break;
         case -1:
             throw cdpiThreadException(pcap_errbuf);
         }
     }
     while (terminate == false);
-
-    cout << tag << ": raw packets: " << stats->pkt_raw << endl;
-    cout << tag << ": TCP packets: " << stats->pkt_tcp << endl;
-    cout << tag << ": UDP packets: " << stats->pkt_udp << endl;
-    cout << tag << ": MPLS packets: " << stats->pkt_mpls << endl;
-    cout << tag << ": PPPoE packets: " << stats->pkt_pppoe << endl;
-    cout << tag << ": VLAN packets: " << stats->pkt_vlan << endl;
-    cout << tag << ": fragmented packets: " << stats->pkt_frags << endl;
-    cout << tag << ": discarded packets: " << stats->pkt_discard << endl;
-    cout << tag << ": largest packet seen: " << stats->pkt_maxlen << endl;
 
     return NULL;
 }
@@ -307,6 +350,7 @@ void cdpiDetectionThread::ProcessPacket(void)
         hdr_eth = reinterpret_cast<const struct ethhdr *>(pkt_data);
         type = ntohs(hdr_eth->h_proto);
         ip_offset = sizeof(struct ethhdr);
+        stats->pkt_eth++;
         break;
 
     case DLT_LINUX_SLL:
@@ -392,10 +436,18 @@ void cdpiDetectionThread::ProcessPacket(void)
         if (addr_cmp < 0) {
             flow.lower_addr.s_addr = hdr_ip->saddr;
             flow.upper_addr.s_addr = hdr_ip->daddr;
+            if (pcap_datalink_type == DLT_EN10MB) {
+                memcpy(flow.lower_mac, hdr_eth->h_source, ETH_ALEN);
+                memcpy(flow.upper_mac, hdr_eth->h_dest, ETH_ALEN);
+            }
         }
         else {
             flow.lower_addr.s_addr = hdr_ip->daddr;
             flow.upper_addr.s_addr = hdr_ip->saddr;
+            if (pcap_datalink_type == DLT_EN10MB) {
+                memcpy(flow.lower_mac, hdr_eth->h_dest, ETH_ALEN);
+                memcpy(flow.upper_mac, hdr_eth->h_source, ETH_ALEN);
+            }
         }
     }
     else if (flow.version == 6) {
@@ -427,10 +479,18 @@ void cdpiDetectionThread::ProcessPacket(void)
         if (addr_cmp < 0) {
             memcpy(&flow.lower_addr6, &hdr_ip6->ip6_src, sizeof(struct in6_addr));
             memcpy(&flow.upper_addr6, &hdr_ip6->ip6_dst, sizeof(struct in6_addr));
+            if (pcap_datalink_type == DLT_EN10MB) {
+                memcpy(flow.lower_mac, hdr_eth->h_source, ETH_ALEN);
+                memcpy(flow.upper_mac, hdr_eth->h_dest, ETH_ALEN);
+            }
         }
         else {
             memcpy(&flow.lower_addr6, &hdr_ip6->ip6_dst, sizeof(struct in6_addr));
             memcpy(&flow.upper_addr6, &hdr_ip6->ip6_src, sizeof(struct in6_addr));
+            if (pcap_datalink_type == DLT_EN10MB) {
+                memcpy(flow.lower_mac, hdr_eth->h_dest, ETH_ALEN);
+                memcpy(flow.upper_mac, hdr_eth->h_source, ETH_ALEN);
+            }
         }
     }
     else {
@@ -607,23 +667,30 @@ void cdpiDetectionThread::ProcessPacket(void)
 
         new_flow->release();
 
-        cout << tag << ": ";
+        new_flow->print(tag.c_str(), ndpi);
+    }
 
-        if (new_flow->detected_protocol.master_protocol) {
-            char buf[64];
-            cout << ndpi_protocol2name(ndpi,
-                new_flow->detected_protocol, buf, sizeof(buf));
+    if (ts_last_idle_scan + CDPI_IDLE_SCAN_TIME < ts_pkt_last) {
+        uint64_t purged = 0;
+        cdpi_flow_map::iterator i = flows->begin();
+        while (i != flows->end()) {
+            if (i->second->ts_last_seen + CDPI_IDLE_FLOW_TIME < ts_pkt_last) {
+                i->second->release();
+                delete i->second;
+                i = flows->erase(i);
+                purged++;
+            }
+            else
+                i++;
         }
-        else
-            cout << ndpi_get_proto_name(ndpi, new_flow->detected_protocol.protocol);
 
-        if (new_flow->detection_guessed &&
-            new_flow->detected_protocol.protocol != NDPI_PROTOCOL_UNKNOWN)
-            cout << " [GUESSED]";
-
-        cout << ": " <<
-            new_flow->lower_ip << ":" << ntohs(new_flow->lower_port) << " <-> " <<
-            new_flow->upper_ip << ":" << ntohs(new_flow->upper_port) << endl;
+        ts_last_idle_scan = ts_pkt_last;
+/*
+        if (purged > 0) {
+            cdpi_printf("%s: Purged %lu idle flows (%lu active)\n",
+                tag.c_str(), purged, flows->size());
+        }
+*/
     }
 }
 

@@ -15,8 +15,8 @@ AC_PROG_INSTALL
 AM_PROG_LIBTOOL
 
 # Checks for libraries.
-#AC_CHECK_LIB([procps], [openproc], [], [
-#        AC_MSG_ERROR([libprocps not found but is required.])])
+AC_CHECK_LIB([rt], [timer_create], [], [
+	AC_MSG_ERROR([librt not found.])])
 AC_CHECK_LIB([pthread], [pthread_create], [], [
 	AC_MSG_ERROR([libpthread not found.])])
 AC_CHECK_LIB([pcap], [pcap_open_live], [], [
@@ -32,6 +32,10 @@ AC_HEADER_STDBOOL
 AC_TYPE_SIZE_T
 
 # Checks for library functions.
+
+# Compiler optimizations
+#CFLAGS+=" -fomit-frame-pointer -O3 -falign-functions=16 -falign-jumps=16 -falign-loops=16 -falign-labels=16"
+#CXXFLAGS+=" -fomit-frame-pointer -O3 -falign-functions=16 -falign-jumps=16 -falign-loops=16 -falign-labels=16"
 
 # Output files
 AC_CONFIG_FILES([Makefile src/Makefile cdpid.spec])

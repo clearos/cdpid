@@ -17,7 +17,10 @@
 #ifndef _CDPI_H
 #define _CDPI_H
 
+#define CDPI_STATS_INTERVAL     15      // Collect stats every N seconds
 #define CDPI_DETECTION_TICKS    1000    // Ticks-per-second (1000 = milliseconds)
+#define CDPI_IDLE_SCAN_TIME     10      // Idle flow scan in milliseconds
+#define CDPI_IDLE_FLOW_TIME     30000   // Purge idle flows older than this (30s)
 
 #define CDPI_PCAP_SNAPLEN       1536    // Capture snap length
 #define CDPI_PCAP_READ_TIMEOUT  500     // Milliseconds
@@ -25,6 +28,7 @@
 struct cdpiDetectionStats
 {
     uint64_t pkt_raw;
+    uint64_t pkt_eth;
     uint64_t pkt_mpls;
     uint64_t pkt_pppoe;
     uint64_t pkt_vlan;
@@ -43,6 +47,9 @@ struct cdpiDetectionStats
 struct cdpiFlow
 {
     uint8_t version;
+
+    uint8_t lower_mac[ETH_ALEN];
+    uint8_t upper_mac[ETH_ALEN];
 
     struct in_addr lower_addr;
     struct in_addr upper_addr;
@@ -102,9 +109,11 @@ struct cdpiFlow
 
     inline void release(void) {
         if (ndpi_flow != NULL) { ndpi_free_flow(ndpi_flow); ndpi_flow = NULL; }
-        if (id_src) { delete id_src; id_src = NULL; }
-        if (id_dst) { delete id_dst; id_dst = NULL; }
+        if (id_src != NULL) { delete id_src; id_src = NULL; }
+        if (id_dst != NULL) { delete id_dst; id_dst = NULL; }
     }
+
+    void print(const char *tag, struct ndpi_detection_module_struct *ndpi);
 };
 
 typedef unordered_map<string, struct cdpiFlow *> cdpi_flow_map;

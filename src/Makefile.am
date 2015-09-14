@@ -1,7 +1,7 @@
 AUTOMAKE_OPTIONS = foreign
 ACLOCAL_AMFLAGS = -I m4
 
-AM_CXXFLAGS = ${CXXFLAGS} -I../include -I../ndpi/src/include
+AM_CXXFLAGS = ${CXXFLAGS} -std=gnu++11 -I../include -I../ndpi/src/include
 
 #EXTRA_DIST = 
 
