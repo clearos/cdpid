@@ -21,11 +21,6 @@ void *cdpi_mem_alloc(unsigned long size);
 
 void cdpi_mem_free(void *ptr);
 
-enum cdpi_output_flags {
-    CDPI_PRINTF_STDOUT = 0x01,
-    CDPI_PRINTF_SYSLOG = 0x02,
-};
-
 void cdpi_printf(const char *format, ...);
 
 void cdpi_debug_printf(

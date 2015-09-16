@@ -22,6 +22,11 @@
 #define CDPI_IDLE_SCAN_TIME     10      // Idle flow scan in milliseconds
 #define CDPI_IDLE_FLOW_TIME     30000   // Purge idle flows older than this (30s)
 
+#define CDPI_JSON_FILE_NAME     "/var/lib/cdpid/cdpid.json"
+#define CDPI_JSON_FILE_USER     "root"
+#define CDPI_JSON_FILE_GROUP    "webconfig"
+#define CDPI_JSON_FILE_MODE     0640
+
 #define CDPI_PCAP_SNAPLEN       1536    // Capture snap length
 #define CDPI_PCAP_READ_TIMEOUT  500     // Milliseconds
 
@@ -40,6 +45,28 @@ struct cdpiDetectionStats
     uint64_t pkt_udp;
     uint64_t pkt_ip_bytes;
     uint64_t pkt_wire_bytes;
+    uint64_t pkt_discard_bytes;
+
+    inline cdpiDetectionStats& operator+=(const cdpiDetectionStats &rhs) {
+        pkt_raw += rhs.pkt_raw;
+        pkt_eth += rhs.pkt_eth;
+        pkt_mpls += rhs.pkt_mpls;
+        pkt_pppoe += rhs.pkt_pppoe;
+        pkt_vlan += rhs.pkt_vlan;
+        pkt_frags += rhs.pkt_frags;
+        pkt_discard += rhs.pkt_discard;
+        if (rhs.pkt_maxlen > pkt_maxlen)
+            pkt_maxlen = rhs.pkt_maxlen;
+        pkt_ip += rhs.pkt_ip;
+        pkt_tcp += rhs.pkt_tcp;
+        pkt_udp += rhs.pkt_udp;
+        pkt_ip_bytes += rhs.pkt_ip_bytes;
+        pkt_wire_bytes += rhs.pkt_wire_bytes;
+        pkt_discard_bytes += rhs.pkt_discard_bytes;
+        return *this;
+    }
+
+    void print(const char *tag = "");
 };
 
 #define CDPI_SSL_CERTLEN        48      // SSL certificate length

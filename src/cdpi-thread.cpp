@@ -53,6 +53,8 @@ using namespace std;
 #include "cdpi-util.h"
 #include "cdpi-thread.h"
 
+extern bool cdpi_debug;
+
 static void *cdpi_thread_entry(void *param)
 {
     void *rv = NULL;
@@ -120,27 +122,14 @@ void cdpiFlow::print(const char *tag, struct ndpi_detection_module_struct *ndpi)
     }
     else
         p = ndpi_get_proto_name(ndpi, detected_protocol.protocol);
-#if 1
-    printf(
+
+    cdpi_printf(
         "%s: %s%s: %s:%hu <-> %s:%hu\n", tag, p,
         (detection_guessed &&
             detected_protocol.protocol != NDPI_PROTOCOL_UNKNOWN) ? " [GUESSED]" : "",
         lower_ip,
         ntohs(lower_port), upper_ip,
         ntohs(upper_port));
-#else
-    printf(
-        "%s: %s%s: %s:[%02x:%02x:%02x:%02x:%02x:%02x]:%hu <-> %s:[%02x:%02x:%02x:%02x:%02x:%02x]:%hu\n", tag, p,
-        (detection_guessed &&
-            detected_protocol.protocol != NDPI_PROTOCOL_UNKNOWN) ? " [GUESSED]" : "",
-        lower_ip,
-        lower_mac[0], lower_mac[1], lower_mac[2],
-        lower_mac[3], lower_mac[4], lower_mac[5],
-        ntohs(lower_port), upper_ip,
-        upper_mac[0], upper_mac[1], upper_mac[2],
-        upper_mac[3], upper_mac[4], upper_mac[5],
-        ntohs(upper_port));
-#endif
 }
 
 cdpiThread::cdpiThread(const string &tag, long cpu)
@@ -405,29 +394,35 @@ void cdpiDetectionThread::ProcessPacket(void)
 
         if (pkt_header->len - ip_offset < sizeof(iphdr)) {
             // XXX: Warning: header too small
-            stats->pkt_discard += pkt_header->len;
+            stats->pkt_discard++;
+            stats->pkt_discard_bytes += pkt_header->len;
             return;
         }
 
         if ((frag_off & 0x3FFF) != 0) {
             // XXX: Warning: packet fragmentation not supported
             stats->pkt_frags++;
-            stats->pkt_discard += pkt_header->len;
+            stats->pkt_discard++;
+            stats->pkt_discard_bytes += pkt_header->len;
             return;
         }
 
         if ((frag_off & 0x1FFF) != 0) {
-            stats->pkt_discard += pkt_header->len;
+            stats->pkt_frags++;
+            stats->pkt_discard++;
+            stats->pkt_discard_bytes += pkt_header->len;
             return;
         }
 
         if (ip_len > pkt_header->len - ip_offset) {
-            stats->pkt_discard += pkt_header->len;
+            stats->pkt_discard++;
+            stats->pkt_discard_bytes += pkt_header->len;
             return;
         }
 
         if (pkt_header->len - ip_offset < ntohs(hdr_ip->tot_len)) {
-            stats->pkt_discard += pkt_header->len;
+            stats->pkt_discard++;
+            stats->pkt_discard_bytes += pkt_header->len;
             return;
         }
 
@@ -495,7 +490,8 @@ void cdpiDetectionThread::ProcessPacket(void)
     }
     else {
         // XXX: Warning: unsupported protocol version (IPv4/6 only)
-        stats->pkt_discard += pkt_header->len;
+        stats->pkt_discard++;
+        stats->pkt_discard_bytes += pkt_header->len;
         return;
     }
 
@@ -667,7 +663,8 @@ void cdpiDetectionThread::ProcessPacket(void)
 
         new_flow->release();
 
-        new_flow->print(tag.c_str(), ndpi);
+        if (cdpi_debug)
+            new_flow->print(tag.c_str(), ndpi);
     }
 
     if (ts_last_idle_scan + CDPI_IDLE_SCAN_TIME < ts_pkt_last) {

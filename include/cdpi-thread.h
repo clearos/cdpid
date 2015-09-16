@@ -63,6 +63,9 @@ public:
         cdpi_flow_map *flow_map, cdpiDetectionStats *stats, long cpu = -1);
     virtual ~cdpiDetectionThread();
 
+    struct ndpi_detection_module_struct *GetDetectionModule(void) {
+        return ndpi;
+    }
     virtual void *Entry(void);
 
 protected:
